@@ -1,1 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Coin Store</title>
+    <!-- QR Code & Firebase CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    
+    <style>
+        :root {
+            --primary-violet: #7c3aed;
+            --violet-glow: #a855f7;
+            --violet-light: #f3e8ff;
+            --bg-white: #f8fafc;
+            --card-white: #ffffff;
+            --text-dark: #0f172a;
+            --text-muted: #64748b;
+            --success-green: #10b981;
+        }
+
+        * { box-sizing: border-box; font-family: 'Inter', system-ui, sans-serif; }
+        body { background: var(--bg-white); color: var(--text-dark); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 15px; }
+        .container { background: var(--card-white); padding: 26px; border-radius: 20px; width: 100%; max-width: 460px; box-shadow: 0 10px 30px rgba(124, 58, 237, 0.12); border: 1px solid var(--violet-light); }
+        h2, h3 { text-align: center; color: var(--primary-violet); margin: 0 0 15px 0; font-weight: 800; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 6px; font-size: 13px; color: var(--text-muted); font-weight: 600; }
+        input, select { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1.5px solid #e2e8f0; background: #fff; color: var(--text-dark); font-size: 15px; outline: none; }
+        input:focus, select:focus { border-color: var(--violet-glow); }
+        .btn { width: 100%; padding: 13px; background: linear-gradient(135deg, var(--primary-violet), var(--violet-glow)); color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; }
+        .wallet-card { background: linear-gradient(135deg, #7c3aed, #9333ea); color: white; padding: 18px; border-radius: 16px; text-align: center; margin-bottom: 20px; }
+        .balance-value { font-size: 32px; font-weight: 900; margin: 4px 0; }
+        .ratio-pill { background: rgba(255,255,255,0.2); padding: 3px 10px; border-radius: 20px; font-size: 12px; display: inline-block; }
+        .qr-section { display: none; text-align: center; margin-top: 15px; padding: 15px; background: var(--violet-light); border-radius: 14px; border: 1.5px dashed var(--violet-glow); }
+        canvas { background: white; padding: 8px; border-radius: 10px; margin: 8px 0; }
+        .timer-box { font-size: 18px; font-weight: 800; color: #b91c1c; background: #fee2e2; padding: 4px 10px; border-radius: 8px; display: inline-block; }
+        .pay-btn { display: inline-block; width: 100%; padding: 12px; background: var(--success-green); color: white; text-decoration: none; border-radius: 10px; font-weight: bold; margin-top: 8px; }
+        .history-card { margin-top: 25px; border-top: 1.5px solid #f1f5f9; padding-top: 15px; }
+        .history-list { max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+        .history-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 8px; background: #f8fafc; border: 1px solid #f1f5f9; font-size: 13px; }
+        .status-badge { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; }
+        .status-SUCCESS { background: #dcfce7; color: #166534; }
+        .status-PENDING { background: #fef3c7; color: #92400e; }
+        .status-REJECTED { background: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- LOGIN SECTION -->
+    <div id="authSection">
+        <h2>⚡ Direct Coin Deposit</h2>
+        <p style="text-align: center; color: var(--text-muted); font-size: 13px; margin-top: -8px; margin-bottom: 20px;">मोबाइल नंबर / यूजरनेम दर्ज करें</p>
+
+        <div class="form-group">
+            <label>टारगेट गेम / ऐप चुनें</label>
+            <select id="authAppSelect">
+                <option value="app1">FF Counter (ffcounter.my.app)</option>
+                <option value="app2">HP Dabang (hp.dabang)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>मोबाइल नंबर / यूजरनेम</label>
+            <input type="text" id="authUserId" placeholder="उदा. 9876543210 या player1">
+        </div>
+
+        <button class="btn" onclick="directLogin()">Continue to Deposit ➔</button>
+    </div>
+
+    <!-- MAIN DASHBOARD -->
+    <div id="depositSection" style="display: none;">
+        <div class="wallet-card">
+            <small id="userHeaderTag">ID: -</small>
+            <div class="balance-value" id="displayCoins">0</div>
+            <div>उपलब्ध कॉइन बैलेंस</div>
+            <div class="ratio-pill">⚡ ₹1 = 1 Coin</div>
+        </div>
+
+        <div id="depositForm">
+            <div class="form-group">
+                <label>डिपॉजिट राशि (₹ INR)</label>
+                <input type="number" id="customAmount" placeholder="राशि दर्ज करें (उदा. 50)" min="1" oninput="updateCoinsPreview()">
+                <small id="previewCoinText" style="color: var(--primary-violet); font-weight: 600; display: block; margin-top: 4px;">आपको मिलेंगे: 0 Coins</small>
+            </div>
+
+            <button class="btn" onclick="generateDepositQR()">Pay & Deposit Coins</button>
+            <button class="btn" style="margin-top: 8px; background: #64748b;" onclick="logout()">Logout</button>
+        </div>
+
+        <!-- Dynamic QR Section -->
+        <div class="qr-section" id="qrSection">
+            <div>QR Expires In: <span class="timer-box" id="countdownTimer">06:00</span></div>
+            <br>
+            <canvas id="qrCanvas"></canvas>
+            <p id="amountText" style="font-weight: bold; color: var(--primary-violet); margin: 0;"></p>
+            <a id="upiDeepLink" class="pay-btn" href="#">⚡ Open UPI App to Pay</a>
+            
+            <div class="form-group" style="margin-top: 12px; text-align: left;">
+                <label>UPI 12-Digit UTR / Ref No (पेमेंट के बाद दर्ज करें):</label>
+                <input type="text" id="utrInput" placeholder="उदा. 423589123456" maxlength="16">
+            </div>
+
+            <button class="btn" onclick="submitVerification()">Submit Verification</button>
+            <button class="btn" style="margin-top: 8px; background: #94a3b8;" onclick="cancelQR(true)">Cancel</button>
+        </div>
+
+        <!-- History -->
+        <div class="history-card">
+            <div style="font-size: 14px; font-weight: 700; margin-bottom: 10px;">डिपॉजिट हिस्ट्री (Top-Up History)</div>
+            <div class="history-list" id="historyList"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Firebase Configs[span_2](start_span)[span_2](end_span)[span_3](start_span)[span_3](end_span)
+    const firebaseConfig1 = { 
+        apiKey: "AIzaSyAEoVYbZvoMlpkzWlEM8pWmBCUgHb9hN1M", 
+        databaseURL: "https://ff-counter-1db26-default-rtdb.firebaseio.com", 
+        projectId: "ff-counter-1db26" 
+    }; //[span_4](start_span)[span_4](end_span)
+    const firebaseConfig2 = { 
+        apiKey: "AIzaSyDqFXbs1-oIGnixQL_SpTxKxTuiOynNjRQ", 
+        databaseURL: "https://file-market-e9c39-default-rtdb.firebaseio.com", 
+        projectId: "file-market-e9c39" 
+    }; //[span_5](start_span)[span_5](end_span)
+
+    const app1 = firebase.initializeApp(firebaseConfig1, "app1");
+    const app2 = firebase.initializeApp(firebaseConfig2, "app2");
+    const db1 = firebase.database(app1);
+    const db2 = firebase.database(app2);
+
+    const UPI_ID = "BHARATPE2J0X0L7W5S26333@unitype";
+    const MERCHANT_NAME = "hp dabang";
+
+    let currentUser = null;
+    let currentTargetDb = null;
+    let activeDeposit = null;
+    let countdownInterval = null;
+    let timeLeft = 360;
+
+    function getTargetDb() {
+        return document.getElementById("authAppSelect").value === "app1" ? db1 : db2;
+    }
+
+    function updateCoinsPreview() {
+        const amt = document.getElementById("customAmount").value;
+        const coins = amt ? Math.max(0, parseInt(amt)) : 0;
+        document.getElementById("previewCoinText").innerText = `आपको मिलेंगे: ${coins} Coins (₹1 = 1 Coin)`;
+    }
+
+    async function directLogin() {
+        const userId = document.getElementById("authUserId").value.trim().toLowerCase().replace(/[^a-zA-Z0-9]/g, "_");
+        const db = getTargetDb();
+
+        if (!userId) return alert("कृपया अपना मोबाइल नंबर या यूजरनेम दर्ज करें!");
+
+        const userRef = db.ref("users/" + userId);
+        const snap = await userRef.once("value");
+
+        if (!snap.exists()) {
+            await userRef.set({ userId: userId, coins: 0, createdAt: Date.now() });
+            openDashboard(userId, 0, db);
+        } else {
+            openDashboard(userId, snap.val().coins || 0, db);
+        }
+    }
+
+    function openDashboard(userId, initialCoins, db) {
+        currentUser = userId;
+        currentTargetDb = db;
+        document.getElementById("authSection").style.display = "none";
+        document.getElementById("depositSection").style.display = "block";
+        document.getElementById("userHeaderTag").innerText = "ID: " + userId;
+        document.getElementById("displayCoins").innerText = initialCoins;
+
+        db.ref("users/" + userId + "/coins").on("value", snap => {
+            document.getElementById("displayCoins").innerText = snap.val() || 0;
+        });
+        loadHistory(userId, db);
+    }
+
+    function generateDepositQR() {
+        const amount = parseInt(document.getElementById("customAmount").value);
+        if (!amount || amount <= 0) return alert("कृपया सही राशि दर्ज करें!");
+
+        const txnId = "DEP" + Date.now();
+        activeDeposit = { txnId, amount, coins: amount, status: "PENDING" };
+
+        currentTargetDb.ref("deposits/" + activeDeposit.txnId).set({
+            userId: currentUser,
+            amount: amount,
+            coinsAdded: amount,
+            timestamp: Date.now(),
+            status: "PENDING"
+        });
+
+        const upiUri = `upi://pay?pa=${UPI_ID}&pn=${encodeURIComponent(MERCHANT_NAME)}&am=${amount}&cu=INR&tn=Dep_${currentUser}_${txnId}`;
+        document.getElementById("depositForm").style.display = "none";
+        document.getElementById("qrSection").style.display = "block";
+        document.getElementById("amountText").innerText = `Pay ₹${amount} for ${amount} Coins`;
+        document.getElementById("upiDeepLink").href = upiUri;
+        document.getElementById("utrInput").value = "";
+
+        QRCode.toCanvas(document.getElementById("qrCanvas"), upiUri, { width: 180 });
+        startTimer();
+    }
+
+    function startTimer() {
+        timeLeft = 360;
+        if (countdownInterval) clearInterval(countdownInterval);
+        countdownInterval = setInterval(() => {
+            timeLeft--;
+            const m = Math.floor(timeLeft / 60);
+            const s = timeLeft % 60;
+            document.getElementById("countdownTimer").innerText = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+            if (timeLeft <= 0) {
+                clearInterval(countdownInterval);
+                alert("⏰ समय समाप्त! QR कोड एक्सपायर हो गया।");
+                cancelQR(true);
+            }
+        }, 1000);
+    }
+
+    async function submitVerification() {
+        if (!activeDeposit) return;
+        const utr = document.getElementById("utrInput").value.trim();
+
+        if (!utr || utr.length < 10) {
+            return alert("कृपया पेमेंट करने के बाद 12 अंकों का सही UPI Ref / UTR नंबर दर्ज करें!");
+        }
+
+        try {
+            await currentTargetDb.ref("users/" + currentUser).child("coins").transaction(c => (c || 0) + activeDeposit.coins);
+            await currentTargetDb.ref("deposits/" + activeDeposit.txnId).update({ 
+                status: "SUCCESS", 
+                utr: utr, 
+                completedAt: Date.now() 
+            });
+
+            alert(`✅ सफलता! ${activeDeposit.coins} Coins आपके अकाउंट में जोड़ दिए गए हैं।`);
+            if (countdownInterval) clearInterval(countdownInterval);
+            closeQRView();
+        } catch (err) {
+            alert("एरर: " + err.message);
+        }
+    }
+
+    function cancelQR(isRejected = true) {
+        if (countdownInterval) clearInterval(countdownInterval);
+        if (activeDeposit && isRejected) {
+            currentTargetDb.ref("deposits/" + activeDeposit.txnId).update({ status: "REJECTED" });
+        }
+        closeQRView();
+    }
+
+    function closeQRView() {
+        document.getElementById("qrSection").style.display = "none";
+        document.getElementById("depositForm").style.display = "block";
+        document.getElementById("customAmount").value = "";
+        activeDeposit = null;
+    }
+
+    function loadHistory(userId, db) {
+        db.ref("deposits").orderByChild("userId").equalTo(userId).on("value", snap => {
+            const listEl = document.getElementById("historyList");
+            listEl.innerHTML = "";
+            if (!snap.exists()) {
+                listEl.innerHTML = '<div style="text-align:center; color:#64748b; font-size:12px;">कोई ट्रांजैक्शन नहीं मिला</div>';
+                return;
+            }
+            const data = [];
+            snap.forEach(c => data.unshift({ id: c.key, ...c.val() }));
+            data.forEach(item => {
+                const date = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
+                const div = document.createElement("div");
+                div.className = "history-item";
+                div.innerHTML = `<div><b>+${item.coinsAdded} Coins (₹${item.amount})</b><br><small style="color:#64748b;">${date}</small></div><span class="status-badge status-${item.status}">${item.status}</span>`;
+                listEl.appendChild(div);
+            });
+        });
+    }
+
+    function logout() {
+        if (countdownInterval) clearInterval(countdownInterval);
+        if (currentTargetDb && currentUser) {
+            currentTargetDb.ref("users/" + currentUser + "/coins").off();
+            currentTargetDb.ref("deposits").off();
+        }
+        currentUser = null;
+        currentTargetDb = null;
+        document.getElementById("depositSection").style.display = "none";
+        document.getElementById("authSection").style.display = "block";
+    }
+</script>
+
+</body>
+</html>
 

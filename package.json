@@ -1,0 +1,17 @@
+{
+  "name": "indo-money-app",
+  "version": "1.0.0",
+  "description": "Indo Money - Game Coin Hub Deposit",
+  "main": "index.html",
+  "scripts": {
+    "build": "cordova build android",
+    "run": "cordova run android",
+    "clean": "cordova clean"
+  },
+  "author": "Harshit Rathi",
+  "license": "MIT",
+  "devDependencies": {
+    "cordova": "^12.0.0",
+    "cordova-android": "^12.0.0"
+  }
+}
